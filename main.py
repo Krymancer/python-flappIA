@@ -3,6 +3,8 @@ import numpy as np
 import pygame as pg
 import random
 from itertools import cycle
+from keras.models import Sequential
+from keras.layers import Dense, Activation
 
 GAMENAME = "Flappy Bird"
 FPS = 60
