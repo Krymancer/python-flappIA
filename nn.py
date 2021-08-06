@@ -1,11 +1,16 @@
 import numpy as np
 from math import exp
 
+from numpy.core.fromnumeric import shape
+
 def sigmod(x):
     return 1 / (1  + exp(-x))
 
 def dsigmod(x):
     return x * (1-x)
+
+vsigmod = np.vectorize(sigmod)
+vdsigmod = np.vectorize(dsigmod)
 
 class NeuralNetwork():
     def __init__(self,input_nodes=0,hidden_nodes=0,output_nodes=0,neural_network=None,):
@@ -28,20 +33,25 @@ class NeuralNetwork():
             self.weights_ho = np.random.rand(self.output_nodes,self.hidden_nodes)
 
             self.bias_h = np.random.rand(self.hidden_nodes)
+            self.bias_h = self.bias_h[...,None]
+
             self.bias_o = np.random.rand(self.output_nodes)
+            self.bias_o = self.bias_o[...,None]
 
         self.learning_rate = 0.1
 
     def predict(self,input_array):
-        inputs = np.array(input_array)
+        inputs = np.mat(input_array).transpose()
         hidden = np.matmul(self.weights_ih,inputs)
         hidden = np.add(hidden,self.bias_h)
-        hidden = np.array([sigmod(x) for x in hidden])
-
+        hidden = vsigmod(hidden)
         out = np.matmul(self.weights_ho,hidden)
         out = np.add(out,self.bias_o)
-        out = np.array([sigmod(x) for x in hidden])
-        return out
+        out = vsigmod(out)
+        output = []
+        for item in range(self.output_nodes):
+            output.append(out.item(item))
+        return output
 
     def copy(self):
         return self
@@ -87,3 +97,10 @@ class NeuralNetwork():
         self.weights_ih = np.add(self.weights_ih,weight_ih_deltas)
 
         self.bias_h = np.add(self.bias_h,hidden_gradient)
+    
+    def get_weights(self):
+        return [self.weights_ih, self.weights_ho]
+
+    def set_weights(self,weights):
+        self.weights_ih = weights[0]
+        self.weigths_ho = weights[1]

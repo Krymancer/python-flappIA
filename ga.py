@@ -3,16 +3,14 @@ import numpy as np
 import pygame as pg
 import random
 from itertools import cycle
-from keras.models import Sequential
-from keras.layers import Dense, Activation
-
+from nn import NeuralNetwork
 
 # GA STUFF
 load_saved_pool = False
 save_current_pool = False
 current_pool = []
 fitness = []
-total_models = 50
+total_models = 200
 
 next_pipe_x = -1
 next_pipe_hole_y = -1
@@ -30,16 +28,7 @@ def save_pool():
 
 def create_model():
     """create keras model"""
-    model = Sequential()
-    model.add(Dense(3, input_shape=(3,)))
-    model.add(Activation('relu'))
-    model.add(Dense(7, input_shape=(3,)))
-    model.add(Activation('relu'))
-    model.add(Dense(1, input_shape=(3,)))
-    model.add(Activation('sigmoid'))
-
-    model.compile(loss='mse',optimizer='adam')
-
+    model = NeuralNetwork(input_nodes=3,hidden_nodes=7,output_nodes=2)
     return model
 
 def create_pool():
@@ -68,12 +57,10 @@ def predict_action(height, dist, pipe_height, model_num):
     # Feed in features to the neural net
     # Reshape input
     # Get prediction from model
-    neural_input = np.asarray([height,dist,pipe_height])
-    neural_input = np.atleast_2d(neural_input)
+    neural_input = [height,dist,pipe_height]
+    output_prob = current_pool[model_num].predict(neural_input)
 
-    output_prob = current_pool[model_num](neural_input, 1)[0]
-
-    if(output_prob[0] <= .5):
+    if(output_prob[0] <= output_prob[1]):
         return 1
     return 2
 
@@ -94,7 +81,7 @@ def model_crossover(parent1, parent2):
     new_weight1[gene] = weight2[gene]
     new_weight2[gene] = weight1[gene]
 
-    return np.asarray([new_weight1,new_weight2])
+    return[new_weight1,new_weight2]
 
 def model_mutate(weights):#,generation):
     # mutate each models weights
