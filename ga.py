@@ -2,6 +2,7 @@ import sys
 import numpy as np
 import pygame as pg
 import random
+import math
 from itertools import cycle
 from nn import NeuralNetwork
 
@@ -10,7 +11,7 @@ load_saved_pool = False
 save_current_pool = False
 current_pool = []
 fitness = []
-total_models = 200
+total_models = 100
 
 next_pipe_x = -1
 next_pipe_hole_y = -1
@@ -60,7 +61,7 @@ def predict_action(height, dist, pipe_height, model_num):
     neural_input = [height,dist,pipe_height]
     output_prob = current_pool[model_num].predict(neural_input)
 
-    if(output_prob[0] <= output_prob[1]):
+    if(output_prob[0] >= output_prob[1]):
         return 1
     return 2
 
@@ -92,6 +93,55 @@ def model_mutate(weights):#,generation):
                 weights[i][j] += change
     return weights
 
+def pool_selection(pool):
+    global fitness
+    index = 0
+    highest_fitness = 0
+    for idx in range(total_models):
+        if fitness[idx] > highest_fitness:
+            highest_fitness = fitness[idx]
+            index = idx
+
+    return pool[index]
+
+def random_zero_one():
+    u = 0
+    v = 0;
+    while u == 0:
+        u = np.random.rand()
+    while v == 0: 
+        v = np.random.rand()
+    return math.sqrt( -2.0 * math.log( u ) ) * math.cos( 2.0 * math.pi * v )
+
+def mutate_function(x):
+    if np.random.rand() < 0.1 :
+        offset = random_zero_one() * 0.5
+        newx = x + offset
+        return newx
+    else:
+        return x
+
+def generate(old_pool):
+    new_pool = []
+
+    best = pool_selection(old_pool).get_weights()
+    for _ in range(total_models):
+        model = create_model()
+        model.set_weights(best)
+        model.mutate(mutate_function)
+        new_pool.append(model)
+
+    return new_pool
+
+def ga_mutate_gameover():
+    global current_pool
+    global generation
+
+    current_pool = generate(current_pool)
+    print('Generation: ',generation)
+    generation += 1
+
+
 def ga_gameover():
     """ perform ga actions here"""
     global current_pool
@@ -115,16 +165,6 @@ def ga_gameover():
             highest_fitness = fitness[select]
             best_weights = current_pool[select].get_weights()
         # END ADD
-
-    # REMOVE HERE
-    '''
-    # Scaling bird's fitness by total fitness
-    for select in range(total_models):
-        fitness[select] /= total_fitness
-        # Add previous fitness to selected bird and store
-        if select > 0:
-            fitness[select] += fitness[select-1]
-    '''
 
     # ADD HERE
     # Get top two parents
@@ -271,7 +311,8 @@ def main():
 
         moviment_info = ga_init()
         crash_info = main_game(moviment_info)
-        ga_gameover()
+        ga_mutate_gameover()
+        #ga_gameover()
 
 def ga_init():
     return {
@@ -394,6 +435,7 @@ def main_game(moviment_info):
         for index in range(total_models):
             if birds_y[index] < 0 and birds_state[index] == True:
                 alive_players -= 1
+                fitness[index] -= 50
                 birds_state[index] = False
 
         if alive_players == 0:

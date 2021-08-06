@@ -53,51 +53,14 @@ class NeuralNetwork():
             output.append(out.item(item))
         return output
 
-    def copy(self):
-        return self
-
     def mutate(self,function):
-        self.weights_ih = np.array([function(x) for x in self.weights_ih])
-        self.weights_ho = np.array([function(x) for x in self.weights_ho])
-        self.bias_h = np.array([function(x) for x in self.bias_h])
-        self.bias_o = np.array([function(x) for x in self.bias_o])
+        vfunction = np.vectorize(function)
 
-    def train(self,input_array,target_array):
-        inputs = np.array(input_array)
+        self.weights_ih = vfunction(self.weights_ih)
+        self.weights_ho = vfunction(self.weights_ho)
+        self.bias_h = vfunction(self.bias_h)
+        self.bias_o = vfunction(self.bias_o)
 
-        hidden = np.matmul(self.weights_ih,inputs)
-        hidden = np.add(hidden,self.bias_h)
-        hidden = np.array([sigmod(x) for x in hidden])
-
-        out = np.matmul(self.weights_ho,hidden)
-        out = np.add(out,self.bias_h)
-        out = np.array([sigmod(x) for x in hidden]) 
-
-        targets = np.array(target_array)
-
-        out_errors = np.subtract(targets,out)
-        gradients = np.array([dsigmod(x) for x in out])
-        gradients = np.matmul(gradients,out_errors)
-        gradients = gradients * self.learning_rate
-
-        hidden_T = np.transpose(hidden)
-        weight_ho_deltas = np.matmul(gradients,hidden_T)
-
-        self.weigths_ho = np.add(self.weigths_ho,weight_ho_deltas)
-        self.bias_h = np.add(self.bias_h,gradients)
-
-        who_t = np.transpose(self.weigths_ho)
-        hidden_errors = np.matmul(who_t,out_errors)
-        hidden_gradient = np.array([dsigmod(x) for x in hidden])
-        hidden_gradient = np.matmul(hidden_gradient,hidden_errors)
-        hidden_gradient = hidden_gradient * self.learning_rate
-
-        inputs_T = np.transpose(inputs)
-        weight_ih_deltas = np.matmul(hidden_gradient,inputs_T)
-        self.weights_ih = np.add(self.weights_ih,weight_ih_deltas)
-
-        self.bias_h = np.add(self.bias_h,hidden_gradient)
-    
     def get_weights(self):
         return [self.weights_ih, self.weights_ho]
 
