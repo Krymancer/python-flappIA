@@ -6,6 +6,179 @@ from itertools import cycle
 from keras.models import Sequential
 from keras.layers import Dense, Activation
 
+
+# GA STUFF
+load_saved_pool = False
+save_current_pool = False
+current_pool = []
+fitness = []
+total_models = 50
+
+next_pipe_x = -1
+next_pipe_hole_y = -1
+generation = 1
+
+# START ADD
+highest_fitness = -1
+best_weights = []
+# END ADD
+
+def save_pool():
+    for xi in range(total_models):
+        current_pool[xi].save_weights("saved_models/model_new" + str(xi) + ".keras")
+    print("Current pool saved!")
+
+def create_model():
+    """create keras model"""
+    model = Sequential()
+    model.add(Dense(3, input_shape=(3,)))
+    model.add(Activation('relu'))
+    model.add(Dense(7, input_shape=(3,)))
+    model.add(Activation('relu'))
+    model.add(Dense(1, input_shape=(3,)))
+    model.add(Activation('sigmoid'))
+
+    model.compile(loss='mse',optimizer='adam')
+
+    return model
+
+def create_pool():
+    """create pool"""
+    global load_saved_pool, current_pool,total_models
+    if load_saved_pool:
+        for i in range(total_models):
+            current_pool[i].load_weights("SavedModels/model_new"+str(i)+".keras")
+
+    # Initialize all models
+    for i in range(total_models):
+        model = create_model()
+        current_pool.append(model)
+        # reset fitness score
+        fitness.append(-100)
+
+
+def predict_action(height, dist, pipe_height, model_num):
+    """predic action with input"""
+    global current_pool
+    # The height, dist and pipe_height must be between 0 to 1 (Scaled by SCREENHEIGHT)
+    height = min(SCREENHEIGHT, height) / SCREENHEIGHT - 0.5
+    dist = dist / 450 - 0.5 # Max pipe distance from player will be 450
+    pipe_height = min(SCREENHEIGHT, pipe_height) / SCREENHEIGHT - 0.5
+
+    # Feed in features to the neural net
+    # Reshape input
+    # Get prediction from model
+    neural_input = np.asarray([height,dist,pipe_height])
+    neural_input = np.atleast_2d(neural_input)
+
+    output_prob = current_pool[model_num](neural_input, 1)[0]
+
+    if(output_prob[0] <= .5):
+        return 1
+    return 2
+
+def model_crossover(parent1, parent2):
+    # obtain parent weights
+    # get random gene
+    # swap genes
+    global current_pool
+
+    weight1 = current_pool[parent1].get_weights()
+    weight2 = current_pool[parent2].get_weights()
+
+    new_weight1 = weight1
+    new_weight2 = weight2
+
+    gene = random.randint(0,len(new_weight1)-1)
+
+    new_weight1[gene] = weight2[gene]
+    new_weight2[gene] = weight1[gene]
+
+    return np.asarray([new_weight1,new_weight2])
+
+def model_mutate(weights):#,generation):
+    # mutate each models weights
+    for i in range(len(weights)):
+        for j in range(len(weights[i])):
+            if( random.uniform(0,1) > .85):
+                change = random.uniform(-.5,.5)
+                weights[i][j] += change
+    return weights
+
+def ga_gameover():
+    """ perform ga actions here"""
+    global current_pool
+    global fitness
+    global generation
+    new_weights = []
+    total_fitness = 0
+
+    # START ADD
+    global highest_fitness
+    global best_weights
+    updated = False
+    # END ADD
+
+    # Adding up fitness of all birds
+    for select in range(total_models):
+        total_fitness += fitness[select]
+        # START ADD
+        if fitness[select] >= highest_fitness:
+            updated = True
+            highest_fitness = fitness[select]
+            best_weights = current_pool[select].get_weights()
+        # END ADD
+
+    # REMOVE HERE
+    '''
+    # Scaling bird's fitness by total fitness
+    for select in range(total_models):
+        fitness[select] /= total_fitness
+        # Add previous fitness to selected bird and store
+        if select > 0:
+            fitness[select] += fitness[select-1]
+    '''
+
+    # ADD HERE
+    # Get top two parents
+    parent1 = random.randint(0,total_models-1)
+    parent2 = random.randint(0,total_models-1)
+
+    for i in range(total_models):
+        if fitness[i] >= fitness[parent1]:
+            parent1 = i
+
+    for j in range(total_models):
+        if j != parent1:
+            if fitness[j] >= fitness[parent2]:
+                parent2 = j
+
+
+    for select in range(total_models // 2):
+        # [TODO]
+        cross_over_weights = model_crossover(parent1,parent2)
+        if updated == False:
+            cross_over_weights[1] = best_weights
+        mutated1 = model_mutate(cross_over_weights[0])
+        mutated2 = model_mutate(cross_over_weights[0])
+
+        new_weights.append(mutated1)
+        new_weights.append(mutated2)
+
+    # Reset fitness scores for new round
+    # Set new generation weights
+    for select in range(len(new_weights)):
+        fitness[select] = -100
+        current_pool[select].set_weights(new_weights[select])
+    if save_current_pool == 1:
+        save_pool()
+
+    print('Generation: ',generation)
+    generation += 1
+    return
+
+# END GA STUFF
+
 GAMENAME = "Flappy Bird"
 FPS = 60
 SCREENHEIGHT = 512
@@ -109,10 +282,16 @@ def main():
             get_hitmasks(IMAGES['bird'][2])
         )
 
-        moviment_info = show_welcome_animation()
+        moviment_info = ga_init()
         crash_info = main_game(moviment_info)
-        show_gameover_screen(crash_info)
+        ga_gameover()
 
+def ga_init():
+    return {
+        'bird_y': (SCREENHEIGHT - IMAGES['bird'][0].get_height()) / 2,
+        'base_x': 0,
+        'bird_sprite_animation_generator': cycle([0, 1, 2, 1])
+    }
 
 def show_welcome_animation():
     """Shows welcome screen animation of flappy bird"""
@@ -162,10 +341,19 @@ def show_welcome_animation():
         CLOCK.tick(FPS)
 
 def main_game(moviment_info):
+    """main game"""
+    global fitness,total_models
     score = current_bird_sprite = animation_iterator = 0
     bird_sprite_animation_generator = moviment_info['bird_sprite_animation_generator']
-    bird_x, bird_y = (SCREENWIDTH * 0.2), moviment_info['bird_y']
 
+    birds_x = []
+    birds_y = []
+
+    for _ in range(total_models):
+        bird_x, bird_y = (SCREENWIDTH * 0.2), moviment_info['bird_y']
+        birds_x.append(bird_x)
+        birds_y.append(bird_y)
+        
     base_x = moviment_info['base_x']
     base_shift = IMAGES['base'].get_width() - IMAGES['background'].get_width()
 
@@ -182,6 +370,11 @@ def main_game(moviment_info):
         {'x': SCREENWIDTH + 200 + (SCREENWIDTH / 2), 'y': new_pipe2[1]['y']},
     ]
 
+    global next_pipe_x, next_pipe_hole_y
+
+    next_pipe_x = lower_pipes[0]['x']
+    next_pipe_hole_y = (lower_pipes[0]['y'] + (upper_pipes[0]['y'] + IMAGES['pipes'][0].get_height()))/2
+
     pipe_vel_x = -4
 
     bird_vel_y = -9
@@ -193,24 +386,33 @@ def main_game(moviment_info):
     bird_rotation_threshold = 20
     bird_flap_acceleration = -9
     bird_flapped = False 
+    bird_state = True
 
+    birds_vel_y = [] 
+    birds_acceleration_y = []
+    birds_flapped = []
+    birds_rotation = []
+    birds_state = []
+
+    for _ in range(total_models):
+        birds_vel_y.append(bird_vel_y)
+        birds_acceleration_y.append(bird_acceleration_y)
+        birds_flapped.append(bird_flapped)
+        birds_rotation.append(bird_rotation)
+        birds_state.append(bird_state)
+
+    alive_players = total_models
+        
     while True:
-        for event in pg.event.get():
-            if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
-                pg.quit()
-                sys.exit()
-            if event.type == pg.KEYDOWN and (event.key == pg.K_SPACE or event.key == pg.K_UP):
-                if bird_y > -2 * IMAGES['bird'][0].get_height():
-                    bird_vel_y = bird_flap_acceleration
-                    bird_flapped = True
-                    SOUNDS['wing'].play()
+        for index in range(total_models):
+            if birds_y[index] < 0 and birds_state[index] == True:
+                alive_players -= 1
+                birds_state[index] = False
 
-        crash_test = check_crash({'x':bird_x,'y':bird_y,'index':current_bird_sprite},upper_pipes,lower_pipes)
-
-        if crash_test[0]:
+        if alive_players == 0:
             return {
                 'y': bird_y,
-                'ground_crash': crash_test[1],
+                'ground_crash': True,
                 'base_x': base_x,
                 'upper_pipes': upper_pipes,
                 'lower_pipes': lower_pipes,
@@ -219,12 +421,62 @@ def main_game(moviment_info):
                 'bird_rotation': bird_rotation
             }
 
-        bird_mid_pos = bird_x + IMAGES['bird'][0].get_width() / 2
-        for pipe in upper_pipes:
-            pipe_mid_pos = pipe['x'] + IMAGES['pipes'][0].get_width() / 2
-            if pipe_mid_pos <= bird_mid_pos < pipe_mid_pos + 4:
-                score += 1
-                SOUNDS['point'].play()
+        for index in range(total_models):
+            if birds_state[index]:
+                fitness[index] += 1
+
+        next_pipe_x += pipe_vel_x
+
+        for index in range(total_models):
+            if birds_state[index]:
+                if predict_action(birds_y[index],next_pipe_x,next_pipe_hole_y,index) == 1:
+                    if birds_y[index] > -2 * IMAGES['bird'][0].get_height():
+                        birds_vel_y[index] = bird_flap_acceleration
+                        birds_flapped[index] = True
+
+
+        for event in pg.event.get():
+            if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
+                pg.quit()
+                sys.exit()
+
+        crash_test = check_crash({'x':birds_x,'y':birds_y,'index':current_bird_sprite},upper_pipes,lower_pipes)
+
+        for index in range(total_models):
+            if birds_state[index] == True and crash_test[index] == True:
+                alive_players -= 1
+                birds_state[index] = False
+
+        if alive_players == 0:
+            return {
+                'y': bird_y,
+                'ground_crash': crash_test[1],
+                'base_x': base_x,
+                'upper_pipes': upper_pipes,
+                'lower_pipes': lower_pipes,
+                'score': score,
+                'bird_vel_y': 0,
+                'bird_rotation': bird_rotation
+            }
+
+        # check score
+        gone_through_a_pipe = False
+        for index in range(total_models):
+            if birds_state[index] == True:
+                pipe_index = 0
+                bird_mid_pos = birds_x[index] + IMAGES['bird'][0].get_width() / 2
+                for pipe in upper_pipes:
+                    pipe_mid_pos = pipe['x'] + IMAGES['pipes'][0].get_width() / 2
+                    if pipe_mid_pos <= bird_mid_pos < pipe_mid_pos + 4:
+                        next_pipe_x = lower_pipes[pipe_index + 1]['x']
+                        next_pipe_hole_y = (lower_pipes[pipe_index + 1]['y'] + (upper_pipes[pipe_index + 1]['y'] + IMAGES['pipes'][0].get_height())) / 2
+                        gone_through_a_pipe = True
+                        fitness[index] += 25
+
+                    pipe_index += 1
+
+        if gone_through_a_pipe:
+            score += 1
 
         if (animation_iterator + 1) % 3 == 0:
             current_bird_sprite = next(bird_sprite_animation_generator)
@@ -232,18 +484,15 @@ def main_game(moviment_info):
         animation_iterator = (animation_iterator + 1) % 30
         base_x = -((-base_x + 100) % base_shift) 
 
-        if bird_rotation > -90:
-            bird_rotation -= bird_rotation_velocity
-
-        if bird_vel_y < bird_max_vel_y and not bird_flapped:
-            bird_vel_y += bird_acceleration_y
-        if bird_flapped:
-            bird_flapped = False
-
-            bird_rotation = 45
-
-        bird_height = IMAGES['bird'][current_bird_sprite].get_height()
-        bird_y += min(bird_vel_y,BASEY - bird_y -bird_height)
+        # birds movement
+        for index in range(total_models):
+            if birds_state[index] == True:
+                if birds_vel_y[index] < bird_max_vel_y and not birds_flapped[index]:
+                    birds_vel_y[index] += birds_acceleration_y[index]
+                if birds_flapped[index]:
+                    birds_flapped[index] = False
+            bird_height = IMAGES['bird'][current_bird_sprite].get_height()
+            birds_y[index] += min(birds_vel_y[index],BASEY - birds_y[index] - bird_height)
 
         #move pipes
         for up_pipe, low_pipe in zip(upper_pipes, lower_pipes):
@@ -270,18 +519,12 @@ def main_game(moviment_info):
         
         show_score(score)
 
-        visible_bird_rotation = bird_rotation_threshold
-
-        if bird_rotation <= bird_rotation_threshold:
-            visible_bird_rotation = bird_rotation
-
-        bird_surface = pg.transform.rotate(IMAGES['bird'][current_bird_sprite], visible_bird_rotation)
-        SCREEN.blit(bird_surface,(bird_x,bird_y))
+        for index in range(total_models):
+            if birds_state[index] == True:
+                SCREEN.blit(IMAGES['bird'][current_bird_sprite], (birds_x[index],birds_y[index]))
 
         pg.display.update()
         CLOCK.tick(FPS)
-
-    pass
 
 def show_gameover_screen(crash_info):
     """crashes the player down ans shows gameover image"""
@@ -352,18 +595,25 @@ def show_score(score):
         x_offset += IMAGES['numbers'][digit].get_width()
 
 
-def check_crash(bird,up_pipes,low_pipes):
+def check_crash(birds,up_pipes,low_pipes):
     """returns True if player collides with base or pipes."""
-    bird_index = bird['index']
-    bird['w'] = IMAGES['bird'][0].get_width()
-    bird['h'] = IMAGES['bird'][0].get_height()
+    statuses = []
 
-    # if player crashes into ground
-    if bird['y'] + bird['h'] >= BASEY - 1:
-        return [True, True]
-    else:
-        bird_rect = pg.Rect(bird['x'], bird['y'],
-                      bird['w'], bird['h'])
+    for index in range(total_models):
+        statuses.append(False)
+    
+    for index in range(total_models):
+        statuses[index] = False
+        bird_index = birds['index']
+        birds['w'] = IMAGES['bird'][0].get_width()
+        birds['h'] = IMAGES['bird'][0].get_height()
+
+        # if player crashes into ground
+        if birds['y'][index] + birds['h'] >= BASEY - 1:
+            statuses[index] = True
+        
+        bird_rect = pg.Rect(birds['x'][index], birds['y'][index],
+                    birds['w'], birds['h'])
         pipe_w = IMAGES['pipes'][0].get_width()
         pipe_h = IMAGES['pipes'][0].get_height()
 
@@ -382,8 +632,8 @@ def check_crash(bird,up_pipes,low_pipes):
             low_collide = pixel_collision(bird_rect, low_pipe_rect, bird_hitmask, low_pipe_hitmask)
 
             if up_collide or low_collide:
-                return [True, False]
-    return [False, False]
+                statuses[index] = True
+    return statuses
 
 def pixel_collision(rect1, rect2, hitmask1, hitmask2):
     """Checks if two objects collide and not just their rects"""
@@ -445,4 +695,5 @@ def get_hitmasks(image):
     return mask
 
 if __name__ == "__main__":
+    create_pool()
     main()
