@@ -6,6 +6,7 @@ Uma implementação do jogo flappy bird, utilizando a blibioteca pygame, com a f
 
 - [FlappyBird com Pygame](https://github.com/Krymancer/FlapPyBird)
 - [NEAT (NeuroEvolution of Augmenting Topologies)](https://neat-python.readthedocs.io/en/latest/)
+- [Artigo: Efficient Evolution of Neural Network Topologies](http://nn.cs.utexas.edu/downloads/papers/stanley.cec02.pdf)
 
 
 [link](asdasdsd)

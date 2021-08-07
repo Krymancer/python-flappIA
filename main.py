@@ -312,13 +312,8 @@ def draw_screen(screen,birds,pipes,base,score,generation,pipe_index):
         # draw lines from bird to pipe
         if DRAW_LINES:
             try:
-                x1 = bird.x + BIRDS['red'].get_width()/2
-                y1 = bird.y + BIRDS['red'].get_height()/2
-                x2 = pipes[pipe_index].x + PIPES['red'].get_width()/2 
-                y2 = pipes[pipe_index].y + PIPES['red'].get_height()/2 
-                y3 = PIPES['red'].BOTTOM 
-                pygame.draw.line(screen, (255,0,0), (x1,y1),(x2,y2), 5)
-                pygame.draw.line(screen, (255,0,0), (x1,y1),(x2,y3), 5)
+                pygame.draw.line(screen, (255,0,0), (bird.x+bird.img.get_width()/2, bird.y + bird.img.get_height()/2), (pipes[pipe_ind].x + pipes[pipe_ind].PIPE_TOP.get_width()/2, pipes[pipe_ind].height), 5)
+                pygame.draw.line(screen, (255,0,0), (bird.x+bird.img.get_width()/2, bird.y + bird.img.get_height()/2), (pipes[pipe_ind].x + pipes[pipe_ind].PIPE_BOTTOM.get_width()/2, pipes[pipe_ind].bottom), 5)
             except:
                 pass
         bird.draw(screen)
