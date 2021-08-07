@@ -4,8 +4,7 @@ Uma implementação do jogo flappy bird, utilizando a blibioteca pygame, com a f
 
 ## Referencias: 
 
-- [FlappyBird com Pygame](https://github.com/krymancer/FlappIA)
-
+- [FlappyBird com Pygame](https://github.com/Krymancer/FlapPyBird)
 - [NEAT (NeuroEvolution of Augmenting Topologies)](https://neat-python.readthedocs.io/en/latest/)
 
 
