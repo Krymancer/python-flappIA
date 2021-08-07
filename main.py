@@ -1,446 +1,467 @@
-import sys
-import pygame as pg
+import pygame
 import random
-from itertools import cycle
+import os
+import time
+import neat
+import visualize
+import pickle
 
+pygame.font.init() # Init font
 
-GAMENAME = "Flappy Bird"
-FPS = 60
-SCREENHEIGHT = 512
-SCREENWIDTH = 288
+SCREEN_WIDTH = 576
+SCREEN_HEIGHT = 1024
+FLOOR = 800
+STAT_FONT = pygame.font.SysFont(None, 50)
+END_FONT = pygame.font.SysFont(None, 70)
+DRAW_LINES = True
 
-PIPEGAP = 100
-BASEY = SCREENHEIGHT * 0.79
+SCREEN = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Flappy Bird")
 
-IMAGES,SOUNDS,HITMASKS = {}, {}, {}
+BACKGROUNDS,BIRDS,PIPES = {},{},{}
 
-BASE_SPRITE = 'assets/sprites'
-BASE_AUDIO = 'assets/audio'
+# backgrounds
+BACKGROUNDS['day'] = pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","background-day.png")))
+BACKGROUNDS['night'] = pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","background-night.png")))
 
-BIRDS_LIST = (
-    (
-        f'{BASE_SPRITE}/redbird-upflap.png',
-        f'{BASE_SPRITE}/redbird-midflap.png',
-        f'{BASE_SPRITE}/redbird-downflap.png'
-    ),
-    (
-        f'{BASE_SPRITE}/bluebird-upflap.png',
-        f'{BASE_SPRITE}/bluebird-midflap.png',
-        f'{BASE_SPRITE}/bluebird-downflap.png'
-    ),
-    (
-        f'{BASE_SPRITE}/yellowbird-upflap.png',
-        f'{BASE_SPRITE}/yellowbird-midflap.png',
-        f'{BASE_SPRITE}/yellowbird-downflap.png'
-    )
+# base
+BASE = pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","base.png")))
+
+# birds
+BIRDS['red'] = (
+    pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","redbird-upflap.png"))),
+    pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","redbird-midflap.png"))),
+    pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","redbird-downflap.png")))
 )
 
-BACKGROUND_LIST = (
-    f'{BASE_SPRITE}/background-day.png',
-    f'{BASE_SPRITE}/background-night.png'
+BIRDS['blue'] = (
+    pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","bluebird-upflap.png"))),
+    pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","bluebird-midflap.png"))),
+    pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","bluebird-downflap.png")))
 )
 
-PIPES_LIST = (
-    f'{BASE_SPRITE}/pipe-green.png',
-    f'{BASE_SPRITE}/pipe-red.png'
+BIRDS['yellow'] = (
+    pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","yellowbird-upflap.png"))),
+    pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","yellowbird-midflap.png"))),
+    pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","yellowbird-downflap.png")))
 )
 
-ICON = f'{BASE_SPRITE}/flappy.ico'
-
-def main():
-    global SCREEN,CLOCK
-    pg.init()
-    SCREEN = pg.display.set_mode((SCREENWIDTH,SCREENHEIGHT))
-    CLOCK = pg.time.Clock()
-    pg.display.set_caption(GAMENAME)
-    icon = pg.image.load(ICON)
-    pg.display.set_icon(icon)
-
-    IMAGES['numbers'] = (
-        pg.image.load(f'{BASE_SPRITE}/0.png').convert_alpha(),
-        pg.image.load(f'{BASE_SPRITE}/1.png').convert_alpha(),
-        pg.image.load(f'{BASE_SPRITE}/2.png').convert_alpha(),
-        pg.image.load(f'{BASE_SPRITE}/3.png').convert_alpha(),
-        pg.image.load(f'{BASE_SPRITE}/4.png').convert_alpha(),
-        pg.image.load(f'{BASE_SPRITE}/5.png').convert_alpha(),
-        pg.image.load(f'{BASE_SPRITE}/6.png').convert_alpha(),
-        pg.image.load(f'{BASE_SPRITE}/7.png').convert_alpha(),
-        pg.image.load(f'{BASE_SPRITE}/8.png').convert_alpha(),
-        pg.image.load(f'{BASE_SPRITE}/9.png').convert_alpha()
-    )
-
-    IMAGES['gameover'] = pg.image.load(f'{BASE_SPRITE}/gameover.png')
-    IMAGES['message'] = pg.image.load(f'{BASE_SPRITE}/message.png')
-    IMAGES['base'] = pg.image.load(f'{BASE_SPRITE}/base.png')
-
-    SOUNDS['die'] = pg.mixer.Sound(f'{BASE_AUDIO}/die.ogg')
-    SOUNDS['hit'] = pg.mixer.Sound(f'{BASE_AUDIO}/hit.ogg')
-    SOUNDS['point'] = pg.mixer.Sound(f'{BASE_AUDIO}/point.ogg')
-    SOUNDS['swoosh'] = pg.mixer.Sound(f'{BASE_AUDIO}/swoosh.ogg')
-    SOUNDS['wing'] = pg.mixer.Sound(f'{BASE_AUDIO}/wing.ogg')
-
-    while True:
-        random_background = random.randint(0,len(BACKGROUND_LIST)-1)
-        IMAGES['background'] = pg.image.load(BACKGROUND_LIST[random_background]).convert()
-
-        random_bird = random.randint(0,len(BIRDS_LIST)-1)
-        IMAGES['bird'] = (
-            pg.image.load(BIRDS_LIST[random_bird][0]).convert_alpha(),
-            pg.image.load(BIRDS_LIST[random_bird][1]).convert_alpha(),
-            pg.image.load(BIRDS_LIST[random_bird][2]).convert_alpha()
-        )
-
-        random_pipe = random.randint(0,len(PIPES_LIST)-1)
-        IMAGES['pipes'] = (
-            pg.transform.flip(pg.image.load(PIPES_LIST[random_pipe]).convert_alpha(),False,True),
-            pg.image.load(PIPES_LIST[random_pipe]).convert_alpha()
-        )
-        
-        HITMASKS['pipe'] = (
-            get_hitmasks(IMAGES['pipes'][0]),
-            get_hitmasks(IMAGES['pipes'][1])
-        )
-
-        HITMASKS['bird'] = (
-            get_hitmasks(IMAGES['bird'][0]),
-            get_hitmasks(IMAGES['bird'][1]),
-            get_hitmasks(IMAGES['bird'][2])
-        )
-
-        moviment_info = show_welcome_animation()
-        crash_info = main_game(moviment_info)
-        show_gameover_screen(crash_info)
-
-
-def show_welcome_animation():
-    """Shows welcome screen animation of flappy bird"""
-    current_bird_sprite = 0
-    bird_sprite_animation_generator = cycle([0,1,2,1])
-    animation_iterator = 0
-
-    bird_x = SCREENWIDTH * 0.2
-    bird_y = (SCREENHEIGHT - IMAGES['bird'][0].get_height()) / 2
-
-    message_x = (SCREENWIDTH - IMAGES['message'].get_width()) / 2
-    message_y = (SCREENHEIGHT * 0.12)
-
-    base_x = 0
-    base_shift = IMAGES['base'].get_width() - IMAGES['background'].get_width()
-
-    bird_shm_vals = {'value': 0, 'direction': 1}
-
-    while True:
-        for event in pg.event.get():
-            if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
-                pg.quit()
-                sys.exit()
-            if event.type == pg.KEYDOWN and (event.key == pg.K_SPACE or event.key == pg.K_UP):
-                # make first flap sound and return values for mainGame
-                SOUNDS['wing'].play()
-
-                return {
-                    'bird_y': bird_y + bird_shm_vals['value'],
-                    'base_x': base_x,
-                    'bird_sprite_animation_generator': bird_sprite_animation_generator,
-                }
-
-        if (animation_iterator + 1) % 5 == 0:
-            current_bird_sprite = next(bird_sprite_animation_generator)
-        animation_iterator = (animation_iterator + 1) % 30
-        base_x = -((-base_x + 4) % base_shift)
-        bird_smh(bird_shm_vals)
-
-        SCREEN.blit(IMAGES['background'], (0,0))
-        SCREEN.blit(IMAGES['bird'][current_bird_sprite],
-                    (bird_x, bird_y + bird_shm_vals['value']))
-        SCREEN.blit(IMAGES['message'], (message_x, message_y))
-        SCREEN.blit(IMAGES['base'], (base_x, BASEY))
-
-        pg.display.update()
-        CLOCK.tick(FPS)
-
-def main_game(moviment_info):
-    score = current_bird_sprite = animation_iterator = 0
-    bird_sprite_animation_generator = moviment_info['bird_sprite_animation_generator']
-    bird_x, bird_y = (SCREENWIDTH * 0.2), moviment_info['bird_y']
-
-    base_x = moviment_info['base_x']
-    base_shift = IMAGES['base'].get_width() - IMAGES['background'].get_width()
-
-    new_pipe1 = get_random_pipe()
-    new_pipe2 = get_random_pipe()
-
-    upper_pipes = [
-        {'x': SCREENWIDTH + 200, 'y': new_pipe1[0]['y']},
-        {'x': SCREENWIDTH + 200 + (SCREENWIDTH/2), 'y': new_pipe2[0]['y']},
-    ]
-
-    lower_pipes = [
-        {'x': SCREENWIDTH + 200, 'y': new_pipe1[1]['y']},
-        {'x': SCREENWIDTH + 200 + (SCREENWIDTH / 2), 'y': new_pipe2[1]['y']},
-    ]
-
-    pipe_vel_x = -4
-
-    bird_vel_y = -9
-    bird_max_vel_y = 10
-    bird_min_vel_y = -8
-    bird_acceleration_y = 1
-    bird_rotation = 45
-    bird_rotation_velocity = 3
-    bird_rotation_threshold = 20
-    bird_flap_acceleration = -9
-    bird_flapped = False 
-
-    while True:
-        for event in pg.event.get():
-            if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
-                pg.quit()
-                sys.exit()
-            if event.type == pg.KEYDOWN and (event.key == pg.K_SPACE or event.key == pg.K_UP):
-                if bird_y > -2 * IMAGES['bird'][0].get_height():
-                    bird_vel_y = bird_flap_acceleration
-                    bird_flapped = True
-                    SOUNDS['wing'].play()
-
-        crash_test = check_crash({'x':bird_x,'y':bird_y,'index':current_bird_sprite},upper_pipes,lower_pipes)
-
-        if crash_test[0]:
-            return {
-                'y': bird_y,
-                'ground_crash': crash_test[1],
-                'base_x': base_x,
-                'upper_pipes': upper_pipes,
-                'lower_pipes': lower_pipes,
-                'score': score,
-                'bird_vel_y': bird_vel_y,
-                'bird_rotation': bird_rotation
-            }
-
-        bird_mid_pos = bird_x + IMAGES['bird'][0].get_width() / 2
-        for pipe in upper_pipes:
-            pipe_mid_pos = pipe['x'] + IMAGES['pipes'][0].get_width() / 2
-            if pipe_mid_pos <= bird_mid_pos < pipe_mid_pos + 4:
-                score += 1
-                SOUNDS['point'].play()
-
-        if (animation_iterator + 1) % 3 == 0:
-            current_bird_sprite = next(bird_sprite_animation_generator)
-
-        animation_iterator = (animation_iterator + 1) % 30
-        base_x = -((-base_x + 100) % base_shift) 
-
-        if bird_rotation > -90:
-            bird_rotation -= bird_rotation_velocity
-
-        if bird_vel_y < bird_max_vel_y and not bird_flapped:
-            bird_vel_y += bird_acceleration_y
-        if bird_flapped:
-            bird_flapped = False
-
-            bird_rotation = 45
-
-        bird_height = IMAGES['bird'][current_bird_sprite].get_height()
-        bird_y += min(bird_vel_y,BASEY - bird_y -bird_height)
-
-        #move pipes
-        for up_pipe, low_pipe in zip(upper_pipes, lower_pipes):
-            up_pipe['x'] += pipe_vel_x
-            low_pipe['x'] += pipe_vel_x
-
-        if len(upper_pipes) > 0 and 0 < upper_pipes[0]['x'] < 5:
-            new_pipe = get_random_pipe()
-            upper_pipes.append(new_pipe[0])
-            lower_pipes.append(new_pipe[1])
-
-        if len(upper_pipes) > 0 and upper_pipes[0]['x'] < -IMAGES['pipes'][0].get_width():
-            upper_pipes.pop(0)
-            lower_pipes.pop(0)
-
-        # draw
-        SCREEN.blit(IMAGES['background'], (0,0))
-
-        for up_pipe, low_pipe in zip(upper_pipes, lower_pipes):
-            SCREEN.blit(IMAGES['pipes'][0], (up_pipe['x'], up_pipe['y']))
-            SCREEN.blit(IMAGES['pipes'][1], (low_pipe['x'], low_pipe['y']))
-
-        SCREEN.blit(IMAGES['base'], (base_x, BASEY))
-        
-        show_score(score)
-
-        visible_bird_rotation = bird_rotation_threshold
-
-        if bird_rotation <= bird_rotation_threshold:
-            visible_bird_rotation = bird_rotation
-
-        bird_surface = pg.transform.rotate(IMAGES['bird'][current_bird_sprite], visible_bird_rotation)
-        SCREEN.blit(bird_surface,(bird_x,bird_y))
-
-        pg.display.update()
-        CLOCK.tick(FPS)
-
-    pass
-
-def show_gameover_screen(crash_info):
-    """crashes the player down ans shows gameover image"""
-    score = crash_info['score']
-    bird_x = SCREENWIDTH * 0.2
-    bird_y = crash_info['y']
-    bird_height = IMAGES['bird'][0].get_height()
-    bird_vel_y = crash_info['bird_vel_y']
-    bird_acceleration = 2
-    bird_rotation = crash_info['bird_rotation']
-    bird_rotation_velocity = 7
-
-    base_x = crash_info['base_x']
-
-    upper_pipes, lower_pipes = crash_info['upper_pipes'], crash_info['lower_pipes']
-
-    # play hit and die sounds
-    SOUNDS['hit'].play()
-    if not crash_info['ground_crash']:
-        SOUNDS['die'].play()
-
-    while True:
-        for event in pg.event.get():
-            if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
-                pg.quit()
-                sys.exit()
-            if event.type == pg.KEYDOWN and (event.key == pg.K_SPACE or event.key == pg.K_UP):
-                if bird_y + bird_height >= BASEY - 1:
-                    return
-
-        if bird_y + bird_height < BASEY - 1:
-            bird_y += min(bird_vel_y, BASEY - bird_y - bird_height)
-
-        if bird_vel_y < 15:
-            bird_vel_y += bird_acceleration
-
-        if not crash_info['ground_crash']:
-            if bird_rotation > -90:
-                bird_rotation -= bird_rotation_velocity
-
-        SCREEN.blit(IMAGES['background'], (0,0))
-        for up_pipe, low_pipe in zip(upper_pipes, lower_pipes):
-            SCREEN.blit(IMAGES['pipes'][0], (up_pipe['x'], up_pipe['y']))
-            SCREEN.blit(IMAGES['pipes'][1], (low_pipe['x'], low_pipe['y']))
-        SCREEN.blit(IMAGES['base'], (base_x, BASEY))
-        show_score(score)
-
-        bird_surface = pg.transform.rotate(IMAGES['bird'][1], bird_rotation)
-        SCREEN.blit(bird_surface,(bird_x,bird_y))
-
-        SCREEN.blit(IMAGES['gameover'], (50, 180))
-
-        CLOCK.tick(FPS)
-        pg.display.update()
-
-def show_score(score):
-    """displays score in center of screen"""
-    score_digits = [int(x) for x in list(str(score))]
-    total_width = 0 # total width of all numbers to be printed
-
-    for digit in score_digits:
-        total_width += IMAGES['numbers'][digit].get_width()
-
-    x_offset = (SCREENWIDTH - total_width) / 2
-
-    for digit in score_digits:
-        SCREEN.blit(IMAGES['numbers'][digit], (x_offset, SCREENHEIGHT * 0.1))
-        x_offset += IMAGES['numbers'][digit].get_width()
-
-
-def check_crash(bird,up_pipes,low_pipes):
-    """returns True if player collides with base or pipes."""
-    bird_index = bird['index']
-    bird['w'] = IMAGES['bird'][0].get_width()
-    bird['h'] = IMAGES['bird'][0].get_height()
-
-    # if player crashes into ground
-    if bird['y'] + bird['h'] >= BASEY - 1:
-        return [True, True]
-    else:
-        bird_rect = pg.Rect(bird['x'], bird['y'],
-                      bird['w'], bird['h'])
-        pipe_w = IMAGES['pipes'][0].get_width()
-        pipe_h = IMAGES['pipes'][0].get_height()
-
-        for up_pipe, low_pipe in zip(up_pipes, low_pipes):
-            # upper and lower pipe rects
-            up_pipe_rect = pg.Rect(up_pipe['x'], up_pipe['y'], pipe_w, pipe_h)
-            low_pipe_rect = pg.Rect(low_pipe['x'], low_pipe['y'], pipe_w, pipe_h)
-
-            # player and upper/lower pipe hitmasks
-            bird_hitmask = HITMASKS['bird'][bird_index]
-            up_pipe_hitmask = HITMASKS['pipe'][0]
-            low_pipe_hitmask = HITMASKS['pipe'][1]
-
-            # if bird collided with upipe or lpipe
-            up_collide = pixel_collision(bird_rect, up_pipe_rect, bird_hitmask, up_pipe_hitmask)
-            low_collide = pixel_collision(bird_rect, low_pipe_rect, bird_hitmask, low_pipe_hitmask)
-
-            if up_collide or low_collide:
-                return [True, False]
-    return [False, False]
-
-def pixel_collision(rect1, rect2, hitmask1, hitmask2):
-    """Checks if two objects collide and not just their rects"""
-    rect = rect1.clip(rect2)
-
-    if rect.width == 0 or rect.height == 0:
+# pipes
+PIPES['red'] = (
+    pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","pipe-red.png")))
+)
+
+PIPES['green'] = (
+    pygame.transform.scale2x(pygame.image.load(os.path.join("assets","sprites","pipe-green.png")))
+)
+
+gen = 0
+
+class Base:
+    """
+    Represnts the moving floor of the game
+    """
+    VEL = 5
+    WIDTH = BASE.get_width()
+    IMG = BASE
+
+    def __init__(self, y):
+        """
+        Initialize the object
+        :param y: int
+        :return: None
+        """
+        self.y = y
+        self.x1 = 0
+        self.x2 = self.WIDTH
+
+    def move(self):
+        """
+        move floor so it looks like its scrolling
+        :return: None
+        """
+        self.x1 -= self.VEL
+        self.x2 -= self.VEL
+        if self.x1 + self.WIDTH < 0:
+            self.x1 = self.x2 + self.WIDTH
+
+        if self.x2 + self.WIDTH < 0:
+            self.x2 = self.x1 + self.WIDTH
+
+    def draw(self, win):
+        """
+        Draw the floor. This is two images that move together.
+        :param win: the pygame surface/window
+        :return: None
+        """
+        win.blit(self.IMG, (self.x1, self.y))
+        win.blit(self.IMG, (self.x2, self.y))
+
+class Bird:
+    """
+    Bird class representing the flappy bird
+    """
+    MAX_ROTATION = 25
+    IMGS = BIRDS['yellow']
+    ROT_VEL = 20
+    ANIMATION_TIME = 5
+
+    def __init__(self, x, y):
+        """
+        Initialize the object
+        :param x: starting x pos (int)
+        :param y: starting y pos (int)
+        :return: None
+        """
+        self.x = x
+        self.y = y
+        self.tilt = 0  # degrees to tilt
+        self.tick_count = 0
+        self.vel = 0
+        self.height = self.y
+        self.img_count = 0
+        self.img = self.IMGS[0]
+
+    def jump(self):
+        """
+        make the bird jump
+        :return: None
+        """
+        #force = -10.5
+        self.vel = -11.5
+        self.tick_count = 0
+        self.height = self.y
+
+    def move(self):
+        """
+        make the bird move
+        :return: None
+        """
+        self.tick_count += 1
+
+        # for downward acceleration
+        displacement = self.vel*(self.tick_count) + 0.5*(3)*(self.tick_count)**2  # calculate displacement
+
+        # terminal velocity
+        if displacement >= 16:
+            displacement = (displacement/abs(displacement)) * 16
+
+        if displacement < 0:
+            displacement -= 2
+
+        self.y = self.y + displacement
+
+        if displacement < 0 or self.y < self.height + 50:  # tilt up
+            if self.tilt < self.MAX_ROTATION:
+                self.tilt = self.MAX_ROTATION
+        else:  # tilt down
+            if self.tilt > -90:
+                self.tilt -= self.ROT_VEL
+
+    def draw(self, win):
+        """
+        draw the bird
+        :param win: pygame window or surface
+        :return: None
+        """
+        self.img_count += 1
+
+        # For animation of bird, loop through three images
+        if self.img_count <= self.ANIMATION_TIME:
+            self.img = self.IMGS[0]
+        elif self.img_count <= self.ANIMATION_TIME*2:
+            self.img = self.IMGS[1]
+        elif self.img_count <= self.ANIMATION_TIME*3:
+            self.img = self.IMGS[2]
+        elif self.img_count <= self.ANIMATION_TIME*4:
+            self.img = self.IMGS[1]
+        elif self.img_count == self.ANIMATION_TIME*4 + 1:
+            self.img = self.IMGS[0]
+            self.img_count = 0
+
+        # so when bird is nose diving it isn't flapping
+        if self.tilt <= -80:
+            self.img = self.IMGS[1]
+            self.img_count = self.ANIMATION_TIME*2
+
+
+        # tilt the bird
+        blitRotateCenter(win, self.img, (self.x, self.y), self.tilt)
+
+    def get_mask(self):
+        """
+        gets the mask for the current image of the bird
+        :return: None
+        """
+        return pygame.mask.from_surface(self.img)
+
+class Pipe():
+    """
+    represents a pipe object
+    """
+    GAP = 200
+    VEL = 10
+
+    def __init__(self, x):
+        """
+        initialize pipe object
+        :param x: int
+        :param y: int
+        :return" None
+        """
+        self.x = x
+        self.height = 0
+
+        # where the top and bottom of the pipe is
+        self.top = 0
+        self.bottom = 0
+
+        self.PIPE_TOP = pygame.transform.flip(PIPES['green'], False, True)
+        self.PIPE_BOTTOM = PIPES['green']
+
+        self.passed = False
+
+        self.set_height()
+
+    def set_height(self):
+        """
+        set the height of the pipe, from the top of the screen
+        :return: None
+        """
+        self.height = random.randrange(50, 450)
+        self.top = self.height - self.PIPE_TOP.get_height()
+        self.bottom = self.height + self.GAP
+
+    def move(self):
+        """
+        move pipe based on vel
+        :return: None
+        """
+        self.x -= self.VEL
+
+    def draw(self, win):
+        """
+        draw both the top and bottom of the pipe
+        :param win: pygame window/surface
+        :return: None
+        """
+        # draw top
+        win.blit(self.PIPE_TOP, (self.x, self.top))
+        # draw bottom
+        win.blit(self.PIPE_BOTTOM, (self.x, self.bottom))
+
+
+    def collide(self, bird, win):
+        """
+        returns if a point is colliding with the pipe
+        :param bird: Bird object
+        :return: Bool
+        """
+        bird_mask = bird.get_mask()
+        top_mask = pygame.mask.from_surface(self.PIPE_TOP)
+        bottom_mask = pygame.mask.from_surface(self.PIPE_BOTTOM)
+        top_offset = (self.x - bird.x, self.top - round(bird.y))
+        bottom_offset = (self.x - bird.x, self.bottom - round(bird.y))
+
+        b_point = bird_mask.overlap(bottom_mask, bottom_offset)
+        t_point = bird_mask.overlap(top_mask,top_offset)
+
+        if b_point or t_point:
+            return True
+
         return False
 
-    x1, y1 = rect.x - rect1.x, rect.y - rect1.y
-    x2, y2 = rect.x - rect2.x, rect.y - rect2.y
+def blitRotateCenter(surf, image, topleft, angle):
+    """
+    Rotate a surface and blit it to the window
+    :param surf: the surface to blit to
+    :param image: the image surface to rotate
+    :param topLeft: the top left position of the image
+    :param angle: a float value for angle
+    :return: None
+    """
+    rotated_image = pygame.transform.rotate(image, angle)
+    new_rect = rotated_image.get_rect(center = image.get_rect(topleft = topleft).center)
 
-    for x in range(rect.width):
-        for y in range(rect.height):
-            if hitmask1[x1+x][y1+y] and hitmask2[x2+x][y2+y]:
-                return True
-    return False
-
-def get_random_pipe():
-    """returns a randomly generated pipe"""
-    # y of gap between upper and lower pipe
-    gap_y = random.randrange(0, int(BASEY * 0.6 - PIPEGAP))
-    gap_y += int(BASEY * 0.2)
-    pipe_height = IMAGES['pipes'][0].get_height()
-    pipe_x = SCREENWIDTH + 10
-
-    return [
-        {'x': pipe_x, 'y': gap_y - pipe_height},  # upper pipe
-        {'x': pipe_x, 'y': gap_y + PIPEGAP}, # lower pipe
-    ]
-
-def bird_smh(bird_smh):
-    """oscillates the value of playerShm['val'] between 8 and -8"""
-    if abs(bird_smh['value']) == 8:
-        bird_smh['direction'] *= -1
-
-    if bird_smh['direction'] == 1:
-         bird_smh['value'] += 1
-    else:
-        bird_smh['value'] -= 1
+    surf.blit(rotated_image, new_rect.topleft)
 
 
-def playerShm(playerShm):
-    """oscillates the value of playerShm['val'] between 8 and -8"""
-    if abs(playerShm['val']) == 8:
-        playerShm['dir'] *= -1
+def draw_screen(screen,birds,pipes,base,score,generation,pipe_index):
+    """
+    draws the windows for the main game loop
+    :param screen: pygame window surface
+    :param bird: a Bird object
+    :param pipes: List of pipes
+    :param score: score of the game (int)
+    :param generation: current generation
+    :param pipe_index: index of closest pipe
+    :return: None
+    """
 
-    if playerShm['dir'] == 1:
-            playerShm['val'] += 1
-    else:
-        playerShm['val'] -= 1
+    if generation == 0:
+        generation = 1
+    
+    screen.blit(BACKGROUNDS['day'],(0,0))
 
-def get_hitmasks(image):
-    """returns a hitmask using an image's alpha."""
-    mask = []
-    for x in range(image.get_width()):
-        mask.append([])
-        for y in range(image.get_height()):
-            mask[x].append(bool(image.get_at((x,y))[3]))
-    return mask
+    for pipe in pipes:
+        pipe.draw(screen)
+
+    base.draw(screen)
+
+    for bird in birds:
+        # draw lines from bird to pipe
+        if DRAW_LINES:
+            try:
+                x1 = bird.x + BIRDS['red'].get_width()/2
+                y1 = bird.y + BIRDS['red'].get_height()/2
+                x2 = pipes[pipe_index].x + PIPES['red'].get_width()/2 
+                y2 = pipes[pipe_index].y + PIPES['red'].get_height()/2 
+                y3 = PIPES['red'].BOTTOM 
+                pygame.draw.line(screen, (255,0,0), (x1,y1),(x2,y2), 5)
+                pygame.draw.line(screen, (255,0,0), (x1,y1),(x2,y3), 5)
+            except:
+                pass
+        bird.draw(screen)
+
+    # score
+    score_label = STAT_FONT.render('Score: ' + str(score),1,(255,255,255))
+    screen.blit(score_label, (SCREEN_WIDTH - score_label.get_width() - 15, 10))
+
+    # generations
+    generations_label = STAT_FONT.render('Generation: ' + str(generation-1),1,(255,255,255))
+    screen.blit(generations_label, (10,10))
+
+    # alive
+    alive_label = STAT_FONT.render('Alive: ' + str(len(birds)),1,(255,255,255))
+    screen.blit(alive_label, (10,50))
+
+    pygame.display.update()
+
+def eval_genomes(genomes, config):
+    """
+    runs the simulation of the current population of
+    birds and sets their fitness based on the distance they
+    reach in the game.
+    """
+    global SCREEN, gen
+    win = SCREEN
+    gen += 1
+
+    # start by creating lists holding the genome itself, the
+    # neural network associated with the genome and the
+    # bird object that uses that network to play
+    nets = []
+    birds = []
+    ge = []
+    for genome_id, genome in genomes:
+        genome.fitness = 0  # start with fitness level of 0
+        net = neat.nn.FeedForwardNetwork.create(genome, config)
+        nets.append(net)
+        birds.append(Bird(230,350))
+        ge.append(genome)
+
+    base = Base(FLOOR)
+    pipes = [Pipe(700)]
+    score = 0
+
+    clock = pygame.time.Clock()
+
+    run = True
+    while run and len(birds) > 0:
+        clock.tick(30)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+                pygame.quit()
+                quit()
+                break
+
+        pipe_ind = 0
+        if len(birds) > 0:
+            if len(pipes) > 1 and birds[0].x > pipes[0].x + pipes[0].PIPE_TOP.get_width():  # determine whether to use the first or second
+                pipe_ind = 1                                                                 # pipe on the screen for neural network input
+
+        for x, bird in enumerate(birds):  # give each bird a fitness of 0.1 for each frame it stays alive
+            ge[x].fitness += 0.1
+            bird.move()
+
+            # send bird location, top pipe location and bottom pipe location and determine from network whether to jump or not
+            output = nets[birds.index(bird)].activate((bird.y, abs(bird.y - pipes[pipe_ind].height), abs(bird.y - pipes[pipe_ind].bottom)))
+
+            if output[0] > 0.5:  # we use a tanh activation function so result will be between -1 and 1. if over 0.5 jump
+                bird.jump()
+
+        base.move()
+
+        rem = []
+        add_pipe = False
+        for pipe in pipes:
+            pipe.move()
+            # check for collision
+            for bird in birds:
+                if pipe.collide(bird, win):
+                    ge[birds.index(bird)].fitness -= 1
+                    nets.pop(birds.index(bird))
+                    ge.pop(birds.index(bird))
+                    birds.pop(birds.index(bird))
+
+            if pipe.x + pipe.PIPE_TOP.get_width() < 0:
+                rem.append(pipe)
+
+            if not pipe.passed and pipe.x < bird.x:
+                pipe.passed = True
+                add_pipe = True
+
+        if add_pipe:
+            score += 1
+            # can add this line to give more reward for passing through a pipe (not required)
+            for genome in ge:
+                genome.fitness += 5
+            pipes.append(Pipe(SCREEN_WIDTH))
+
+        for r in rem:
+            pipes.remove(r)
+
+        for bird in birds:
+            if bird.y + bird.img.get_height() - 10 >= FLOOR or bird.y < -50:
+                nets.pop(birds.index(bird))
+                ge.pop(birds.index(bird))
+                birds.pop(birds.index(bird))
+
+        draw_screen(SCREEN, birds, pipes, base, score, gen, pipe_ind)
+
+        # break if score gets large enough
+        if score > 100:
+            pickle.dump(nets[0],open("best.pickle", "wb"))
+            break
+
+def run(config_file):
+    """
+    runs the NEAT algorithm to train a neural network to play flappy bird.
+    :param config_file: location of config file
+    :return: None
+    """
+    config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                         neat.DefaultSpeciesSet, neat.DefaultStagnation,
+                         config_file)
+
+    # Create the population, which is the top-level object for a NEAT run.
+    p = neat.Population(config)
+
+    # Add a stdout reporter to show progress in the terminal.
+    p.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    p.add_reporter(stats)
+    #p.add_reporter(neat.Checkpointer(5))
+
+    # Run for up to 50 generations.
+    winner = p.run(eval_genomes, 50)
+
+    # show final stats
+    print('\nBest genome:\n{!s}'.format(winner))
 
 if __name__ == "__main__":
-    main()
+    local_dir = os.path.dirname(__file__)
+    config_path = os.path.join(local_dir, 'config-feedforward.txt')
+    run(config_path)
